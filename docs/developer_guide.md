@@ -43,6 +43,13 @@ GOrchestrator/
 │       ├── __init__.py
 │       └── parser.py           # JSON log parser
 │
+├── tests/                      # Unit tests
+│   ├── __init__.py
+│   ├── test_config.py          # Settings tests
+│   ├── test_engine.py          # Session engine tests
+│   ├── test_manager.py         # Manager agent tests
+│   └── test_parser.py          # Log parser tests
+│
 ├── docs/                       # Documentation
 │   ├── setup_guide.md
 │   ├── user_guide.md
@@ -50,7 +57,8 @@ GOrchestrator/
 │   └── developer_guide.md
 │
 └── .gorchestrator/             # Runtime data (gitignored)
-    └── sessions/               # Saved sessions
+    ├── sessions/               # Saved sessions
+    └── gorchestrator.log       # Application log file
 ```
 
 ### Module Responsibilities
@@ -542,12 +550,16 @@ def chat(self, user_message: str) -> ManagerResponse:
 
 ## Debugging Tips
 
-### Enable Verbose Logging
+### Application Logs
 
-```python
-# At the top of main.py
-import logging
-logging.basicConfig(level=logging.DEBUG)
+GOrchestrator automatically logs to `.gorchestrator/gorchestrator.log`. Check this file for errors and debug information:
+
+```bash
+# View recent logs
+tail -f .gorchestrator/gorchestrator.log
+
+# On Windows PowerShell
+Get-Content .gorchestrator\gorchestrator.log -Tail 50 -Wait
 ```
 
 ### Debug LLM Calls

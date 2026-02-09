@@ -8,6 +8,7 @@ tasks to the Worker Agent (Mini-SWE-GOCore).
 """
 
 import io
+import logging
 import sys
 from pathlib import Path
 
@@ -49,6 +50,21 @@ from src.core import SessionEngine, get_settings
 
 def main():
     """Main entry point - start interactive session with Manager Agent."""
+    # Configure logging - file only, no console noise
+    log_dir = Path(__file__).parent / ".gorchestrator"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        handlers=[
+            logging.FileHandler(log_dir / "gorchestrator.log", encoding="utf-8"),
+        ],
+    )
+    # Suppress noisy third-party loggers
+    logging.getLogger("litellm").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     try:
         settings = get_settings()
         engine = SessionEngine(settings=settings)

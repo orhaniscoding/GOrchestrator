@@ -178,6 +178,9 @@ class SessionEngine:
         elif cmd == "/clear":
             if self.manager:
                 self.manager.clear_history()
+            self._auto_save()
+            self.ui.clear()
+            self.ui.print_header()
             self.ui.print_success("Conversation cleared. Starting fresh.")
             return True
 
@@ -228,9 +231,34 @@ class SessionEngine:
             # Auto-save after each turn
             self._auto_save()
 
+        except ConnectionError:
+            self.ui.print_error(
+                "Could not connect to LLM API. "
+                "Make sure the proxy is running at: "
+                f"{self.settings.ORCHESTRATOR_API_BASE}"
+            )
+        except TimeoutError:
+            self.ui.print_error("LLM API request timed out. Please try again.")
         except Exception as e:
-            logger.error(f"Manager error: {e}")
-            self.ui.print_error(f"Manager encountered an error: {e}")
+            error_str = str(e).lower()
+            if "connection" in error_str or "refused" in error_str:
+                self.ui.print_error(
+                    "Could not connect to LLM API. "
+                    "Make sure the proxy is running at: "
+                    f"{self.settings.ORCHESTRATOR_API_BASE}"
+                )
+            elif "auth" in error_str or "401" in error_str or "api_key" in error_str:
+                self.ui.print_error(
+                    "Authentication failed. Check your ORCHESTRATOR_API_KEY in .env"
+                )
+            elif "model" in error_str or "404" in error_str:
+                self.ui.print_error(
+                    f"Model '{self.settings.ORCHESTRATOR_MODEL}' not found or unavailable. "
+                    "Check your ORCHESTRATOR_MODEL in .env"
+                )
+            else:
+                logger.error(f"Manager error: {e}")
+                self.ui.print_error(f"An unexpected error occurred: {e}")
 
     def start_interactive_mode(self):
         """Start the interactive session loop."""

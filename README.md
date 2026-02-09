@@ -167,7 +167,7 @@ You> Explain what the Worker just did
 | `/save [name]` | Save session (default: manual_save) |
 | `/load [name]` | Load session (default: latest_session) |
 | `/list` | List available sessions |
-| `/clear` | Clear conversation history |
+| `/clear` | Clear conversation history and screen |
 | `/verbose` | Show detailed Worker output |
 | `/quiet` | Show summarized Worker output |
 | `/history` | Show conversation history |
@@ -185,10 +185,13 @@ ORCHESTRATOR_API_KEY=sk-your-key
 
 # Worker Agent (Mini-SWE-GOCore)
 WORKER_MODEL=claude-3-5-sonnet-20241022
+WORKER_PROFILE=live
 AGENT_PATH=../Mini-SWE-GOCore
 
 # Display settings
 VERBOSE_WORKER=false
+MAX_WORKER_ITERATIONS=5
+WORKER_TIMEOUT=600
 ```
 
 ## Documentation
@@ -217,6 +220,11 @@ GOrchestrator/
 │   │   └── console.py      # Rich terminal UI
 │   └── utils/
 │       └── parser.py       # Log parsing
+├── tests/                  # Unit tests
+│   ├── test_config.py
+│   ├── test_engine.py
+│   ├── test_manager.py
+│   └── test_parser.py
 └── docs/                   # Documentation
 ```
 

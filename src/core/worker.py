@@ -3,13 +3,17 @@ Agent Worker - Subprocess wrapper for Mini-SWE-GOCore.
 Handles spawning the agent process with proper environment injection and real-time output streaming.
 """
 
+import logging
 import os
+import signal
 import subprocess
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .config import Settings, get_settings
 
@@ -106,6 +110,21 @@ class AgentWorker:
         env.update(self.settings.get_agent_env())
         return env
 
+    def _terminate_process(self, process: subprocess.Popen):
+        """Gracefully terminate a subprocess, force kill if needed."""
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.warning("Worker process did not terminate, force killing...")
+                process.kill()
+                process.wait(timeout=3)
+        except Exception as e:
+            logger.error(f"Failed to terminate worker process: {e}")
+
     def run(
         self,
         task: str,
@@ -136,6 +155,7 @@ class AgentWorker:
                 f"Please ensure AGENT_PATH is set correctly in your .env file."
             )
 
+        process = None
         try:
             process = subprocess.Popen(
                 command,
@@ -145,7 +165,7 @@ class AgentWorker:
                 stderr=subprocess.STDOUT,
                 bufsize=1,
                 encoding="utf-8",
-                errors="replace",  # Handle encoding errors gracefully
+                errors="replace",
             )
 
             if process.stdout:
@@ -158,6 +178,10 @@ class AgentWorker:
             process.wait()
             return process.returncode
 
+        except KeyboardInterrupt:
+            if process:
+                self._terminate_process(process)
+            raise
         except FileNotFoundError as e:
             if "uv" in str(e):
                 raise RuntimeError(
@@ -165,6 +189,9 @@ class AgentWorker:
                     "Please install it: https://github.com/astral-sh/uv"
                 ) from e
             raise
+        finally:
+            if process and process.poll() is None:
+                self._terminate_process(process)
 
     def run_task(
         self,
@@ -194,9 +221,24 @@ class AgentWorker:
 
         try:
             gen = self.run(task, model, on_output)
+            timeout = self.settings.WORKER_TIMEOUT
 
             for line in gen:
                 output_lines.append(line)
+
+                # Check timeout
+                if timeout > 0 and (time.time() - start_time) > timeout:
+                    logger.warning(f"Worker task timed out after {timeout}s")
+                    gen.close()
+                    return TaskResult(
+                        status=TaskStatus.FAILED,
+                        exit_code=-2,
+                        output_lines=output_lines,
+                        step_count=step_count,
+                        total_cost=total_cost,
+                        duration_seconds=time.time() - start_time,
+                        error_message=f"Task timed out after {timeout} seconds",
+                    )
 
                 # Parse line to extract metrics
                 entry = parse_log_line(line)

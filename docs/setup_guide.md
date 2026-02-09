@@ -156,6 +156,7 @@ ORCHESTRATOR_API_KEY=sk-your-master-key
 # WORKER (Mini-SWE-GOCore) Configuration
 # ============================================================
 WORKER_MODEL=claude-3-5-sonnet-20241022
+WORKER_PROFILE=live
 AGENT_PATH=../Mini-SWE-GOCore
 PROXY_URL=http://127.0.0.1:8045
 PROXY_KEY=sk-your-master-key
@@ -166,6 +167,7 @@ BYPASS_KEY=sk-dummy
 # ============================================================
 VERBOSE_WORKER=false
 MAX_WORKER_ITERATIONS=5
+WORKER_TIMEOUT=600
 ```
 
 ### 3.3 Run GOrchestrator
@@ -246,12 +248,14 @@ GOrchestrator uses **two separate LLM configurations**:
 | `ORCHESTRATOR_API_BASE` | API endpoint for Manager | http://127.0.0.1:8045 |
 | `ORCHESTRATOR_API_KEY` | API key for Manager | sk-dummy-orchestrator-key |
 | `WORKER_MODEL` | LLM model for Worker | claude-3-5-sonnet-20241022 |
+| `WORKER_PROFILE` | Worker config profile (live, swebench, custom) | live |
 | `AGENT_PATH` | Path to Mini-SWE-GOCore | ../Mini-SWE-GOCore |
 | `PROXY_URL` | Proxy URL for Worker | http://127.0.0.1:8045 |
 | `PROXY_KEY` | Proxy key for Worker | sk-dummy-proxy-key |
 | `BYPASS_KEY` | Direct API bypass key | sk-dummy |
 | `VERBOSE_WORKER` | Show detailed Worker output | false |
 | `MAX_WORKER_ITERATIONS` | Max Worker retries | 5 |
+| `WORKER_TIMEOUT` | Max seconds per Worker task (0 = no timeout) | 600 |
 
 ---
 

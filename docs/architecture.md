@@ -208,6 +208,8 @@ class AgentWorker:
 - Injects environment variables for API access
 - Streams output in real-time
 - Returns structured TaskResult
+- Graceful shutdown on Ctrl+C (terminates subprocess cleanly)
+- Configurable timeout (`WORKER_TIMEOUT`) to prevent runaway tasks
 
 ### 4. Console UI (`src/ui/console.py`)
 

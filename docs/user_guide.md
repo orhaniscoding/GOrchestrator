@@ -135,7 +135,7 @@ GOrchestrator supports several slash commands for session management:
 | `/save [name]` | Save current session | `/save my_project` |
 | `/load [name]` | Load a saved session | `/load my_project` |
 | `/list` | List all saved sessions | `/list` |
-| `/clear` | Clear conversation history | `/clear` |
+| `/clear` | Clear conversation history and screen | `/clear` |
 
 **Session Persistence:**
 - Sessions are automatically saved after each turn

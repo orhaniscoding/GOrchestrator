@@ -390,7 +390,7 @@ Output (last 50 lines):
         return [
             {
                 "role": msg.role.value,
-                "content": msg.content[:100] + "..." if len(msg.content) > 100 else msg.content,
+                "content": msg.content[:200] + "..." if len(msg.content) > 200 else msg.content,
                 "timestamp": msg.timestamp,
                 "has_tool_calls": bool(msg.tool_calls),
             }
@@ -422,6 +422,9 @@ Output (last 50 lines):
         self.messages = []
         for entry in history:
             role = MessageRole(entry.get("role", "user"))
+            # Skip old system prompts - we'll add the current one
+            if role == MessageRole.SYSTEM:
+                continue
             self.messages.append(Message(
                 role=role,
                 content=entry.get("content", ""),
@@ -431,6 +434,8 @@ Output (last 50 lines):
                 name=entry.get("name"),
             ))
 
-        # Ensure system prompt exists
-        if not self.messages or self.messages[0].role != MessageRole.SYSTEM:
-            self._add_system_message()
+        # Always prepend the current system prompt
+        self.messages.insert(0, Message(
+            role=MessageRole.SYSTEM,
+            content=MANAGER_SYSTEM_PROMPT,
+        ))

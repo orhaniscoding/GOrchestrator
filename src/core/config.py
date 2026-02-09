@@ -86,6 +86,11 @@ class Settings(BaseSettings):
         description="Maximum Worker retry iterations per task",
     )
 
+    WORKER_TIMEOUT: int = Field(
+        default=600,
+        description="Maximum time in seconds for a Worker task before timeout (0 = no timeout)",
+    )
+
     @property
     def agent_path_resolved(self) -> Path:
         """Return the resolved absolute path to the agent folder."""
