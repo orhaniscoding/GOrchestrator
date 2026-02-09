@@ -404,6 +404,30 @@ You> Fix the failing test
 # See detailed Worker output to understand what's happening
 ```
 
+### 7. Choose the Right Worker Profile
+
+The Worker's behavior is controlled by a **profile** -- a YAML config file in Mini-SWE-GOCore's `.miniswe/configs/` directory. Change it in your `.env`:
+
+```bash
+# Default general-purpose profile
+WORKER_PROFILE=live
+
+# SWE agent profile with specialized prompts for software engineering
+WORKER_PROFILE=livesweagent
+
+# Your own custom profile
+WORKER_PROFILE=my_custom
+```
+
+Available profiles are YAML files in `Mini-SWE-GOCore/.miniswe/configs/`:
+
+| Profile | Best For |
+|---------|----------|
+| `live` | General purpose tasks, quick edits |
+| `livesweagent` | Complex software engineering tasks, debugging, refactoring |
+
+You can create your own profile by copying an existing YAML and modifying it. See the [Setup Guide](../docs/setup_guide.md#worker-profiles) for details.
+
 ---
 
 <p align="center">

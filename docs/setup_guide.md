@@ -257,6 +257,69 @@ GOrchestrator uses **two separate LLM configurations**:
 | `MAX_WORKER_ITERATIONS` | Max Worker retries | 5 |
 | `WORKER_TIMEOUT` | Max seconds per Worker task (0 = no timeout) | 600 |
 
+### Worker Profiles
+
+The `WORKER_PROFILE` setting tells GOrchestrator which configuration file to use when spawning the Worker agent. Profiles are YAML files stored in Mini-SWE-GOCore's `.miniswe/configs/` directory.
+
+**How it works:**
+
+When GOrchestrator runs the Worker, it executes:
+```bash
+uv run mini --headless --profile <WORKER_PROFILE> --model <WORKER_MODEL> --task "..."
+```
+
+Mini-SWE-GOCore then loads the matching config file:
+```
+Mini-SWE-GOCore/
+└── .miniswe/
+    └── configs/
+        ├── live.yaml             # WORKER_PROFILE=live (default, general purpose)
+        ├── livesweagent.yaml     # WORKER_PROFILE=livesweagent (SWE agent with custom prompts)
+        └── my_custom.yaml        # WORKER_PROFILE=my_custom (your own profile)
+```
+
+**Profile contents:**
+
+Each YAML profile controls:
+
+| Section | What it configures |
+|---------|-------------------|
+| `agent.system_template` | System prompt for the Worker LLM |
+| `agent.instance_template` | Task template with instructions |
+| `agent.step_limit` | Max steps per task (0 = unlimited) |
+| `agent.cost_limit` | Max cost in USD per task |
+| `agent.mode` | Interaction mode (e.g., `confirm`) |
+| `model.model_name` | LLM model (can override `WORKER_MODEL`) |
+| `model.api_base` | API endpoint (can override proxy settings) |
+| `model.model_kwargs` | Model parameters (temperature, max_tokens, etc.) |
+| `environment.env` | Environment variables for the Worker |
+
+**Example: Using the `livesweagent` profile:**
+
+```bash
+# In your .env
+WORKER_PROFILE=livesweagent
+```
+
+The `livesweagent.yaml` profile includes specialized prompts for software engineering tasks with detailed instructions for file editing, code analysis, and tool creation.
+
+**Creating a custom profile:**
+
+1. Copy an existing profile:
+   ```bash
+   cd Mini-SWE-GOCore
+   cp .miniswe/configs/live.yaml .miniswe/configs/my_project.yaml
+   ```
+
+2. Edit the YAML to customize behavior (model, prompts, limits, etc.)
+
+3. Update GOrchestrator's `.env`:
+   ```bash
+   WORKER_PROFILE=my_project
+   ```
+
+> **Note:** If the profile YAML defines `model.model_name` and `model.api_base`, those values may override the `WORKER_MODEL`, `PROXY_URL`, and `PROXY_KEY` settings from GOrchestrator's `.env`. Check your profile YAML to understand which settings take precedence.
+
 ---
 
 ## Troubleshooting

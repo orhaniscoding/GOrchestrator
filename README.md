@@ -194,6 +194,36 @@ MAX_WORKER_ITERATIONS=5
 WORKER_TIMEOUT=600
 ```
 
+### Worker Profiles
+
+The `WORKER_PROFILE` setting determines which configuration the Worker agent uses. Profiles are YAML files located in Mini-SWE-GOCore's `.miniswe/configs/` directory:
+
+```
+Mini-SWE-GOCore/
+└── .miniswe/
+    └── configs/
+        ├── live.yaml           # Default profile
+        ├── livesweagent.yaml   # SWE agent profile with custom prompts
+        └── your_custom.yaml    # Any custom profile you create
+```
+
+Each profile controls the Worker's behavior: system prompts, model settings, step/cost limits, and more.
+
+**Examples:**
+
+```bash
+# Default profile (general purpose)
+WORKER_PROFILE=live
+
+# SWE agent profile (optimized for software engineering tasks)
+WORKER_PROFILE=livesweagent
+
+# Your own custom profile
+WORKER_PROFILE=your_custom
+```
+
+To create a custom profile, copy an existing YAML file in `.miniswe/configs/` and modify it to your needs. See the [Setup Guide](docs/setup_guide.md#worker-profiles) for details.
+
 ## Documentation
 
 | Document | Description |
