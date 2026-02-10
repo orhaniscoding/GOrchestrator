@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Suppress litellm debug logs
 litellm.set_verbose = False
+litellm.suppress_debug_info = True
 
 
 class MessageRole(Enum):

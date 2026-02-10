@@ -61,7 +61,9 @@ def main():
         ],
     )
     # Suppress noisy third-party loggers
-    logging.getLogger("litellm").setLevel(logging.WARNING)
+    logging.getLogger("litellm").setLevel(logging.ERROR)
+    logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+    logging.getLogger("LiteLLM Proxy").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 

@@ -5,6 +5,7 @@ Handles spawning the agent process with proper environment injection and real-ti
 
 import logging
 import os
+import re
 import signal
 import subprocess
 import time
@@ -16,6 +17,17 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from .config import Settings, get_settings
+
+# Patterns to filter out noisy third-party log lines from Worker subprocess output
+_NOISE_PATTERNS = [
+    "Provider List: https://docs.litellm.ai",
+    "LiteLLM completion()",
+    "LiteLLM:INFO",
+    "LiteLLM:DEBUG",
+    "Wrapper: Completed Call",
+    "litellm.set_verbose",
+    "Give Feedback",
+]
 
 
 class TaskStatus(Enum):
@@ -108,7 +120,18 @@ class AgentWorker:
         """
         env = os.environ.copy()
         env.update(self.settings.get_agent_env())
+        # Suppress LiteLLM INFO log spam (e.g. "Provider List" messages)
+        env["LITELLM_LOG"] = "ERROR"
         return env
+
+    @staticmethod
+    def _is_noise_line(line: str) -> bool:
+        """Check if a line is noisy third-party output that should be filtered."""
+        # Strip ANSI escape codes for matching
+        stripped = re.sub(r'\x1b\[[0-9;]*m', '', line).strip()
+        if not stripped:
+            return False
+        return any(pattern in stripped for pattern in _NOISE_PATTERNS)
 
     def _terminate_process(self, process: subprocess.Popen):
         """Gracefully terminate a subprocess, force kill if needed."""
@@ -171,6 +194,9 @@ class AgentWorker:
             if process.stdout:
                 for line in process.stdout:
                     clean_line = line.rstrip("\n\r")
+                    # Skip noisy third-party log lines
+                    if self._is_noise_line(clean_line):
+                        continue
                     if on_output:
                         on_output(clean_line)
                     yield clean_line
