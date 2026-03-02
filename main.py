@@ -42,9 +42,6 @@ def configure_encoding():
 # Configure encoding FIRST, before any imports that might print
 configure_encoding()
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
 from src.core import SessionEngine, get_settings
 
 

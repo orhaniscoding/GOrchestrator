@@ -1,1 +1,1 @@
-# GOrchestrator - Manager/Controller for Mini-SWE-GOCore
+# GOrchestrator - AI Orchestrator with integrated worker core
