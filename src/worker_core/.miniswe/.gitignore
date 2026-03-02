@@ -1,0 +1,6 @@
+# Mini-SWE-GOCore agent files
+# Keep configs/ for version control, ignore data and logs
+
+data/
+logs/
+*.log

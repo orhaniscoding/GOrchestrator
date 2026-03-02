@@ -1,0 +1,34 @@
+# Mini-SWE-GOCore Live Profile
+# ==========================
+# Auto-generated on first run. Edit as needed.
+#
+# Usage:
+#   mini --profile live --task "Fix the bug"
+#   mini --headless --profile live --task "Refactor code"
+#
+# Environment Variables:
+#   MINI_API_BASE    - Custom API endpoint
+#   MINI_API_KEY     - API key for proxy
+#   MINI_API_TIMEOUT - Request timeout (seconds)
+
+model:
+  model_class: litellm
+  model_name: "gpt-4o"
+  cost_tracking: "ignore_errors"
+  model_kwargs:
+    temperature: 0.0
+    max_tokens: 4096
+
+environment:
+  cwd: "."
+  timeout: 120
+
+agent:
+  mode: "confirm"
+  step_limit: 50
+  cost_limit: 5.0
+  confirm_exit: true
+
+headless:
+  include_timestamps: true
+  max_output_length: 10000
