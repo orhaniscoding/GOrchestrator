@@ -73,8 +73,11 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 5. **Verify setup**
 
    ```bash
+   # Run the application
    uv run python main.py
-   # Should start the application
+
+   # Run all tests (130 tests)
+   uv run pytest
    ```
 
 ---
@@ -96,7 +99,7 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 
 - Look for issues labeled `good first issue` for beginner-friendly tasks
 - Check `help wanted` for issues where we need community help
-- Browse the [project board](https://github.com/yourusername/GOrchestrator/projects) for planned features
+- Browse the [project board](https://github.com/orhaniscoding/GOrchestrator/projects) for planned features
 
 ### Proposing New Features
 
@@ -152,8 +155,7 @@ uv run python main.py
 uv run pytest
 
 # Check code style
-uv run black --check src/
-uv run mypy src/
+uv run ruff check src/
 ```
 
 ### 4. Commit Your Changes
@@ -243,10 +245,10 @@ We follow [PEP 8](https://pep8.org/) with these tools:
 
 ```bash
 # Format code
-uv run black src/ tests/
+uv run ruff format src/ tests/
 
-# Sort imports
-uv run isort src/ tests/
+# Lint
+uv run ruff check src/ tests/
 
 # Type checking
 uv run mypy src/
@@ -429,7 +431,7 @@ Contributors will be recognized in:
 
 If you have questions about contributing:
 
-- Open a [Discussion](https://github.com/yourusername/GOrchestrator/discussions)
+- Open a [Discussion](https://github.com/orhaniscoding/GOrchestrator/discussions)
 - Ask in an issue with the `question` label
 - Reach out to maintainers
 

@@ -7,11 +7,17 @@ This guide is for developers who want to understand, extend, or contribute to GO
 - [Project Structure](#project-structure)
 - [Development Setup](#development-setup)
 - [Core Concepts](#core-concepts)
+- [LiteLLM-Based Routing](#litellm-based-routing)
+- [Sub-Manager System](#sub-manager-system)
+- [LLM Pool](#llm-pool)
+- [Team Management](#team-management)
+- [Dynamic Tool System](#dynamic-tool-system)
 - [Adding New Tools](#adding-new-tools)
 - [Customizing the UI](#customizing-the-ui)
 - [Adding Slash Commands](#adding-slash-commands)
 - [Testing](#testing)
 - [Code Style](#code-style)
+- [Debugging Tips](#debugging-tips)
 
 ---
 
@@ -29,35 +35,54 @@ GOrchestrator/
 │   ├── __init__.py
 │   │
 │   ├── core/                   # Core business logic
-│   │   ├── __init__.py         # Exports public API
-│   │   ├── config.py           # Pydantic settings
-│   │   ├── manager.py          # Manager Agent (LLM)
+│   │   ├── __init__.py         # Public API exports
+│   │   ├── config.py           # Settings, provider detection, env persistence, SANITIZE_RE
+│   │   ├── manager.py          # Manager Agent (LiteLLM unified routing)
 │   │   ├── worker.py           # Worker subprocess wrapper
-│   │   └── engine.py           # Session orchestration
+│   │   ├── engine.py           # Session engine, WorkerRegistry, slash commands
+│   │   ├── sub_manager.py      # Sub-Manager advisory agents (Mixture of Agents)
+│   │   ├── llm_pool.py         # Parallel multi-LLM execution pool
+│   │   └── team.py             # Team management (Manager + Sub-Manager combos)
+│   │
+│   ├── commands/               # Command system
+│   │   ├── __init__.py
+│   │   ├── parser.py           # Command parser and validator
+│   │   ├── handlers.py         # Command handlers for all sources
+│   │   ├── completer.py        # Tab completion system
+│   │   └── help.py             # Help system
 │   │
 │   ├── ui/                     # User interface
 │   │   ├── __init__.py
-│   │   └── console.py          # Rich terminal UI
+│   │   └── console.py          # Rich terminal UI, dashboard, autocomplete
 │   │
-│   └── utils/                  # Utilities
+│   ├── utils/                  # Utilities
+│   │   ├── __init__.py
+│   │   └── parser.py           # Worker JSON log parser
+│   │
+│   └── worker_core/            # Integrated worker engine (Mini-SWE-GOCore)
 │       ├── __init__.py
-│       └── parser.py           # JSON log parser
+│       ├── minisweagent/       # Agent code (models, agents, config, etc.)
+│       └── .miniswe/           # Runtime configs and data
 │
-├── tests/                      # Unit tests
+├── tests/                      # Unit tests (200+ tests)
 │   ├── __init__.py
-│   ├── test_config.py          # Settings tests
-│   ├── test_engine.py          # Session engine tests
-│   ├── test_manager.py         # Manager agent tests
+│   ├── test_config.py          # Settings + provider detection tests
+│   ├── test_engine.py          # Session engine + worker management tests
+│   ├── test_manager.py         # Manager agent + LiteLLM routing tests
+│   ├── test_llm_pool.py        # LLM Pool CRUD, persistence, parallel execution
+│   ├── test_sub_manager.py     # Sub-Manager registry tests
+│   ├── test_commands_parser.py # Command parser tests
 │   └── test_parser.py          # Log parser tests
 │
 ├── docs/                       # Documentation
-│   ├── setup_guide.md
-│   ├── user_guide.md
-│   ├── architecture.md
-│   └── developer_guide.md
+│   ├── architecture.md         # Technical architecture
+│   ├── user_guide.md           # User guide
+│   ├── setup_guide.md          # Installation walkthrough
+│   └── developer_guide.md      # This file
 │
 └── .gorchestrator/             # Runtime data (gitignored)
-    ├── sessions/               # Saved sessions
+    ├── sessions/               # Per-session directories
+    ├── workers.json            # Worker registry
     └── gorchestrator.log       # Application log file
 ```
 
@@ -65,12 +90,20 @@ GOrchestrator/
 
 | Module | Purpose |
 |--------|---------|
-| `core/config.py` | Settings management via pydantic-settings |
-| `core/manager.py` | LLM-powered Manager Agent with tool calling |
-| `core/worker.py` | Subprocess wrapper for Mini-SWE-GOCore |
-| `core/engine.py` | Session loop and command handling |
-| `ui/console.py` | Rich terminal interface |
-| `utils/parser.py` | Parse Worker JSON logs |
+| `core/config.py` | Settings via pydantic-settings, `detect_provider()`, `strip_provider_prefix()`, `write_env_value()`, `get_agent_env()`, `SANITIZE_RE`, `sanitize_name()` |
+| `core/manager.py` | LiteLLM unified routing (`custom_llm_provider`), dynamic tool system, parallel worker execution, sub-manager consultation |
+| `core/worker.py` | Subprocess wrapper for integrated worker core with per-worker API override |
+| `core/engine.py` | Session loop, `WorkerRegistry`, `WorkerConfig`, `SLASH_COMMAND_TREE`, slash command handlers, checkpoint system |
+| `core/sub_manager.py` | `SubManagerRegistry`, `SubManagerConfig`, advisory agent consultation, per-sub-manager LLM pools |
+| `core/llm_pool.py` | `LLMPool`, `LLMConfig`, `LLMResponse`, parallel multi-LLM execution via ThreadPoolExecutor |
+| `core/team.py` | `TeamRegistry`, `TeamConfig`, saved Manager + Sub-Manager combinations |
+| `commands/parser.py` | `CommandParser`, `Command`, SOURCES/COMMAND_TREE validation |
+| `commands/handlers.py` | `CommandHandler`, routes parsed commands to engine methods |
+| `commands/completer.py` | Tab completion for slash commands via prompt_toolkit |
+| `commands/help.py` | Help text generation |
+| `ui/console.py` | Rich terminal: dashboard, autocomplete (NestedCompleter), SafeFileHistory, worker output tagging |
+| `utils/parser.py` | Parse Worker JSON log lines into structured entries |
+| `worker_core/` | Integrated Mini-SWE-GOCore engine -- autonomous coding agent with LiteLLM |
 
 ---
 
@@ -79,14 +112,10 @@ GOrchestrator/
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourusername/GOrchestrator.git
+git clone https://github.com/orhaniscoding/GOrchestrator.git
 cd GOrchestrator
 
-# Create virtual environment
-uv venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Install in development mode
+# Install all dependencies (includes worker core deps)
 uv sync
 ```
 
@@ -100,11 +129,7 @@ cp .env.example .env
 ### 3. Run in Development
 
 ```bash
-# Run directly
 uv run python main.py
-
-# Or with auto-reload (if using a tool like watchdog)
-uv run watchmedo auto-restart --pattern="*.py" -- python main.py
 ```
 
 ---
@@ -113,364 +138,375 @@ uv run watchmedo auto-restart --pattern="*.py" -- python main.py
 
 ### 1. The Manager Agent
 
-The Manager Agent (`src/core/manager.py`) is the heart of GOrchestrator.
+The Manager Agent (`src/core/manager.py`) is the heart of GOrchestrator. It uses LiteLLM for unified provider-aware routing.
 
 ```python
 class ManagerAgent:
-    def __init__(self, settings, on_worker_output, on_thinking):
+    def __init__(self, settings, worker_registry, on_worker_output, on_thinking):
         self.settings = settings
         self.worker = AgentWorker(settings)
-        self.messages = []  # Conversation history
-
-        # Callbacks for UI integration
-        self.on_worker_output = on_worker_output
+        self.worker_registry = worker_registry
+        self.messages = []
+        self.on_worker_output = on_worker_output  # fn(line, worker_name)
         self.on_thinking = on_thinking
-
-        # Initialize with system prompt
         self._add_system_message()
 
     def chat(self, user_message: str) -> ManagerResponse:
-        """Main entry point for user messages."""
         # 1. Add user message to history
-        # 2. Call LLM with tools
-        # 3. Handle any tool calls
+        # 2. Call LLM via _call_llm() (LiteLLM unified routing)
+        # 3. Handle any tool calls (parallel if multiple)
         # 4. Return final response
 ```
 
-### 2. Tool Calling
+### 2. Provider Detection
 
-Tools are defined as JSON schemas that the LLM can call:
+Provider is detected from the model name in `config.py`:
 
 ```python
-WORKER_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "delegate_to_worker",
-        "description": "...",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "task_description": {"type": "string", "description": "..."},
-            },
-            "required": ["task_description"]
-        }
-    }
-}
+def detect_provider(model_name: str) -> str:
+    # "anthropic/claude-opus-4" → "anthropic" (explicit prefix)
+    # "claude-sonnet-4-20250514"        → "anthropic" (keyword match)
+    # "gpt-4o"                    → "openai" (keyword match)
+    # "gemini-pro"                → "google" (keyword match)
+    # "anything-else"             → "openai" (default)
 ```
 
-### 3. Session Persistence
+### 3. Worker Registry
 
-Sessions are saved as JSON files in `.gorchestrator/sessions/`:
+Workers are managed by `WorkerRegistry` in `worker_registry.py`, persisted to `.gorchestrator/workers.json`:
 
 ```python
-def save_session(self, name: str) -> Path:
-    session_data = {
-        "version": "2.0",
-        "saved_at": datetime.now().isoformat(),
-        "manager_history": self.manager.export_history()
+@dataclass
+class WorkerConfig:
+    name: str
+    model: str
+    profile: str
+    active: bool = False
+    api_base: str | None = None
+    api_key: str | None = None
+
+class WorkerRegistry:
+    def ensure_default(self, model, profile)  # Create default from .env
+    def list_all(self) -> list[WorkerConfig]
+    def get_active_workers(self) -> list[WorkerConfig]
+    def get_primary(self) -> WorkerConfig | None
+    def add(self, name, model, profile) -> WorkerConfig
+    def remove(self, name) -> bool
+    def update_api(self, name, api_base, api_key) -> bool
+```
+
+### 4. Session Persistence
+
+Sessions use unique IDs with random names (e.g., `bold-phoenix-a1b2c3d4`) and are stored in per-session directories under `.gorchestrator/sessions/`.
+
+---
+
+## LiteLLM-Based Routing
+
+Both Manager and Worker use **LiteLLM** with `custom_llm_provider` for unified provider-aware routing. This is the same library and same pattern in both layers.
+
+### How It Works
+
+The Manager's `_call_llm()` method uses a single LiteLLM call:
+
+```python
+def _call_llm(self, include_tools=True):
+    config = self.settings.get_orchestrator_config()
+    model_name = strip_provider_prefix(config["model"])
+    provider = detect_provider(config["model"])
+
+    kwargs = {
+        "model": model_name,
+        "messages": [msg.to_dict() for msg in self.messages],
+        "max_tokens": 4096,
+        "api_base": config["api_base"],
+        "api_key": config["api_key"],
+        "custom_llm_provider": provider,  # "anthropic", "openai", "google"
     }
-    # Save to file
+
+    if include_tools:
+        kwargs["tools"] = self._build_worker_tools()
+        kwargs["tool_choice"] = "auto"
+
+    # Extended thinking for *-thinking models
+    if "thinking" in model_name.lower():
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+        kwargs["max_tokens"] = 16000
+
+    return litellm.completion(**kwargs)
+```
+
+LiteLLM handles automatically:
+- Native API format per provider (Anthropic `/v1/messages` vs OpenAI `/v1/chat/completions`)
+- URL suffix management (no manual `/v1` appending needed)
+- Response normalization to OpenAI format
+- Extended thinking parameter forwarding
+
+### Adding a New Provider
+
+To add support for a new provider (e.g., Cohere):
+
+1. Add keywords to `config.py`:
+   ```python
+   _COHERE_KEYWORDS = ("command-r",)
+   ```
+
+2. Update `detect_provider()`:
+   ```python
+   if any(k in name for k in _COHERE_KEYWORDS):
+       return "cohere"
+   ```
+
+3. Add tests in `test_config.py` and `test_manager.py`
+
+That's it -- LiteLLM handles the rest. No new SDK, no new `_call_*` method needed.
+
+---
+
+## Sub-Manager System
+
+### Architecture
+
+Sub-Managers (`src/core/sub_manager.py`) are expert advisor AI agents managed by `SubManagerRegistry`. They provide specialized analysis (architecture, security, code review) that the Manager synthesizes before delegating tasks.
+
+```python
+class SubManagerRegistry:
+    def __init__(self, registry_file: Path):
+        self._registry: dict[str, SubManagerConfig] = {}
+
+    def add(name, profile, model, description) -> SubManagerConfig
+    def remove(name) -> bool
+    def set_active(name) / set_inactive(name) -> bool
+    def activate_only(names: list[str])
+    def get_active() -> list[SubManagerConfig]
+    def update_model(name, model) / update_profile(name, profile) -> bool
+    def update_api(name, api_base, api_key) -> bool
+    def add_parallel_llm(name, llm_name, model) -> bool
+    def remove_parallel_llm(name, llm_name) -> bool
+```
+
+### Adding a New Sub-Manager Profile
+
+1. Create a YAML file in `src/worker_core/.miniswe/configs/sub_managers/`:
+   ```yaml
+   # my_advisor.yaml
+   system_prompt: "You are a specialized advisor for..."
+   temperature: 0.7
+   max_tokens: 4096
+   ```
+
+2. Use it: `/submanager add my-advisor my_advisor claude-sonnet-4-20250514`
+
+### Name Sanitization
+
+All sub-manager names are sanitized using `SANITIZE_RE` from `config.py`:
+```python
+from .config import SANITIZE_RE
+name = SANITIZE_RE.sub("-", raw_name)  # "my.advisor!" → "my-advisor-"
 ```
 
 ---
 
-## Adding New Tools
+## LLM Pool
 
-You can extend the Manager with additional tools beyond `delegate_to_worker`.
+### Architecture
 
-### Step 1: Define the Tool Schema
+The `LLMPool` class (`src/core/llm_pool.py`) manages parallel multi-LLM execution. It supports both file-backed persistence and in-memory mode.
 
 ```python
-# In src/core/manager.py
+class LLMPool:
+    def __init__(self, registry_file: Path | None = None):
+        # None = in-memory mode (for sub-manager embedded pools)
+        self._llms: dict[str, LLMConfig] = {}
 
-WEB_SEARCH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "web_search",
-        "description": "Search the web for information",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query"
-                },
-                "num_results": {
-                    "type": "integer",
-                    "description": "Number of results to return",
-                    "default": 5
-                }
-            },
-            "required": ["query"]
+    def add(name, model, api_base, api_key) -> LLMConfig
+    def remove(name) -> bool
+    def execute_parallel(messages, system_prompt, on_response) -> list[LLMResponse]
+    def to_dict_list() -> list[dict]       # For embedding in sub-manager JSON
+    def from_dict_list(data: list[dict])   # Restore from sub-manager JSON
+```
+
+### Parallel Execution
+
+```python
+def execute_parallel(self, messages, system_prompt=None, on_response=None):
+    with ThreadPoolExecutor(max_workers=len(self._llms)) as executor:
+        futures = {
+            executor.submit(self._call_single, llm, messages, system_prompt): llm
+            for llm in self._llms.values()
         }
-    }
-}
-```
-
-### Step 2: Add Tool to Available Tools
-
-```python
-# Update the tools list in _call_llm()
-if include_tools:
-    kwargs["tools"] = [WORKER_TOOL, WEB_SEARCH_TOOL]
-```
-
-### Step 3: Implement Tool Handler
-
-```python
-def _handle_tool_calls(self, tool_calls: list[dict]) -> list[Any]:
-    results = []
-
-    for tool_call in tool_calls:
-        name = tool_call["function"]["name"]
-        args = json.loads(tool_call["function"]["arguments"])
-
-        if name == "delegate_to_worker":
-            result = self._execute_worker_task(args["task_description"])
-        elif name == "web_search":
-            result = self._execute_web_search(args["query"], args.get("num_results", 5))
-
-        results.append(result)
-
+        results = []
+        for future in as_completed(futures):
+            response = future.result()
+            if on_response:
+                on_response(response)  # Callback for streaming
+            results.append(response)
     return results
-
-def _execute_web_search(self, query: str, num_results: int) -> str:
-    """Execute a web search."""
-    # Implement search logic
-    # Return results as string for LLM context
-    return f"Search results for '{query}': ..."
 ```
 
-### Step 4: Update System Prompt (Optional)
+### Usage Contexts
 
-Add instructions about the new tool:
+| Context | Storage | Description |
+|---------|---------|-------------|
+| Manager LLM Pool | `.gorchestrator/manager_llm_pool.json` | Manager queries multiple LLMs |
+| Sub-Manager Pool | Embedded in `sub_managers.json` | Per-sub-manager parallel LLMs |
+
+---
+
+## Team Management
+
+### Architecture
+
+Teams (`src/core/team.py`) are saved combinations of a Manager profile and Sub-Manager names. `TeamRegistry` handles CRUD and activation.
 
 ```python
-MANAGER_SYSTEM_PROMPT = """
-...
-You also have access to:
-- `web_search(query)`: Search the web for information
-...
-"""
+class TeamRegistry:
+    def __init__(self, registry_file: Path):
+        self._teams: dict[str, TeamConfig] = {}
+
+    def add(name, manager_profile, sub_managers) -> TeamConfig
+    def remove(name) -> bool
+    def activate(name, sub_manager_registry) -> bool
+    def deactivate(sub_manager_registry) -> None
+    def add_member(team_name, sm_name) -> bool
+    def remove_member(team_name, sm_name) -> bool
+```
+
+### Activation Flow
+
+```
+/team activate review-team
+    │
+    ├── 1. Set Manager profile to team.manager_profile
+    ├── 2. Call sub_manager_registry.activate_only(team.sub_managers)
+    │       ├── Deactivate all current sub-managers
+    │       └── Activate only the ones in the team
+    └── 3. Rebuild Manager system prompt with new profile + active advisors
 ```
 
 ---
 
-## Customizing the UI
+## Dynamic Tool System
 
-### Adding New Display Methods
+### How Tools Are Generated
+
+Tools are dynamically generated from active workers:
 
 ```python
-# In src/ui/console.py
-
-class ConsoleUI:
-    def display_custom_panel(self, title: str, content: str, style: str = "blue"):
-        """Display a custom panel with specified styling."""
-        panel = Panel(
-            Markdown(content),
-            title=f"[bold {style}]{title}[/bold {style}]",
-            border_style=style,
-            padding=(0, 1),
-        )
-        self.console.print(panel)
-
-    def display_code_block(self, code: str, language: str = "python"):
-        """Display syntax-highlighted code."""
-        from rich.syntax import Syntax
-        syntax = Syntax(code, language, theme="monokai", line_numbers=True)
-        self.console.print(syntax)
-
-    def display_progress_bar(self, description: str, total: int):
-        """Create a progress bar context manager."""
-        from rich.progress import Progress, BarColumn, TextColumn
-        return Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            console=self.console,
-        )
+def _build_worker_tools(self) -> list[dict]:
+    tools = []
+    for wc in worker_registry.get_active_workers():
+        safe_name = _sanitize_tool_name(wc.name)
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": f"delegate_to_{safe_name}",
+                "description": f"Delegate to Worker '{wc.name}' "
+                               f"(model: {wc.model}, profile: {wc.profile})...",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "task_description": {"type": "string", ...},
+                        "context": {"type": "string", ...}
+                    },
+                    "required": ["task_description"]
+                }
+            }
+        })
+    return tools
 ```
 
-### Customizing the Theme
+LiteLLM handles tool format conversion for each provider automatically.
+
+### Tool Resolution
+
+When the LLM calls a tool, `_resolve_worker()` maps the tool name back to a `WorkerConfig`:
 
 ```python
-# In src/ui/console.py
-
-GORCHESTRATOR_THEME = Theme({
-    # Existing styles
-    "info": "cyan",
-    "warning": "yellow",
-    "error": "bold red",
-    "success": "bold green",
-
-    # Add custom styles
-    "code": "green on black",
-    "highlight": "bold yellow",
-    "muted": "dim white",
-
-    # Role-specific
-    "user": "bold green",
-    "manager": "bold cyan",
-    "worker": "dim white",
-})
+def _resolve_worker(self, tool_name: str) -> WorkerConfig | None:
+    # "delegate_to_coder" → WorkerConfig(name="coder", ...)
+    # "delegate_to_worker" → None (legacy, uses default settings)
 ```
 
-### Adding Emoji/Icon Customization
+### Parallel Execution
+
+Multiple tool calls execute in parallel via `ThreadPoolExecutor`:
 
 ```python
-class ConsoleUI:
-    # Make icons configurable
-    ICONS = {
-        "user": "👤",
-        "manager": "🧠",
-        "worker": "👷",
-        "success": "✓",
-        "error": "✗",
-        "warning": "⚠",
-        "info": "ℹ",
+with ThreadPoolExecutor(max_workers=len(tool_calls)) as executor:
+    futures = {
+        executor.submit(self._execute_single_tool_call, tc): tc
+        for tc in tool_calls
     }
-
-    def __init__(self, use_emoji: bool = True):
-        self.use_emoji = use_emoji
-        if not use_emoji:
-            self.ICONS = {k: "" for k in self.ICONS}
+    for future in as_completed(futures):
+        result, message = future.result()
 ```
 
 ---
 
 ## Adding Slash Commands
 
-### Step 1: Add Handler in Engine
+### Step 1: Register in SLASH_COMMAND_TREE
 
 ```python
-# In src/core/engine.py
-
-def _handle_slash_command(self, command: str) -> bool:
-    parts = command.strip().split(maxsplit=1)
-    cmd = parts[0].lower()
-    arg = parts[1] if len(parts) > 1 else ""
-
+SLASH_COMMAND_TREE: dict[str, list[str] | None] = {
     # ... existing commands ...
+    "/export": None,  # No sub-commands
+    "/stats": ["session", "workers"],  # With sub-commands
+}
+```
 
+This automatically enables tab-completion via NestedCompleter.
+
+### Step 2: Add Handler
+
+```python
+def _handle_slash_command(self, command: str) -> bool:
+    # ... existing handlers ...
     elif cmd == "/export":
         self._handle_export_command(arg)
         return True
-
-    elif cmd == "/model":
-        self._handle_model_command(arg)
-        return True
-
-    return False
-
-def _handle_export_command(self, filename: str):
-    """Export conversation to markdown."""
-    filename = filename or "conversation.md"
-
-    content = "# GOrchestrator Conversation\n\n"
-    for msg in self.manager.messages:
-        if msg.role.value == "user":
-            content += f"## 👤 User\n{msg.content}\n\n"
-        elif msg.role.value == "assistant":
-            content += f"## 🧠 Manager\n{msg.content}\n\n"
-
-    with open(filename, "w") as f:
-        f.write(content)
-
-    self.ui.print_success(f"Exported to {filename}")
-
-def _handle_model_command(self, model_name: str):
-    """Change the Manager model."""
-    if not model_name:
-        self.ui.print_info(f"Current model: {self.settings.ORCHESTRATOR_MODEL}")
-        return
-
-    # Update model (would need settings refresh)
-    self.ui.print_success(f"Model changed to: {model_name}")
 ```
 
-### Step 2: Update Help
+### Step 3: Add Alias (Optional)
 
 ```python
-def _show_help(self):
-    help_text = """
-    ...
-    | `/export [file]` | Export conversation to markdown |
-    | `/model [name]` | Change Manager model |
-    ...
-    """
+_COMMAND_ALIASES = {
+    "/e": "/export",
+}
 ```
 
 ---
 
 ## Testing
 
-### Unit Tests
+### Test Structure
 
+| File | Tests | Coverage |
+|------|-------|----------|
+| `test_config.py` | Settings, provider detection, env persistence | `config.py` |
+| `test_engine.py` | Session engine, worker management, slash commands | `engine.py` |
+| `test_manager.py` | Manager agent, LiteLLM routing, tool system, command handlers | `manager.py`, `engine.py` |
+| `test_llm_pool.py` | LLM Pool CRUD, persistence, serialization, parallel execution | `llm_pool.py` |
+| `test_sub_manager.py` | Sub-Manager registry CRUD, persistence, parallel LLM management | `sub_manager.py` |
+| `test_commands_parser.py` | Command parser, validation, suggestions | `commands/parser.py` |
+| `test_parser.py` | Log line parsing | `utils/parser.py` |
+
+### Key Test Patterns
+
+**LiteLLM routing tests:**
 ```python
-# tests/test_parser.py
+class TestLiteLLMRouting:
+    @patch("src.core.manager.litellm")
+    def test_call_llm_passes_custom_llm_provider(self, mock_litellm):
+        # Verify custom_llm_provider is passed correctly
+        call_kwargs = mock_litellm.completion.call_args
+        assert call_kwargs.kwargs["custom_llm_provider"] == "anthropic"
 
-import pytest
-from src.utils.parser import parse_log_line, AgentLogEntry, RawLogEntry
-
-def test_parse_step_log():
-    line = '{"type": "step", "step": 1, "message": "Starting..."}'
-    entry = parse_log_line(line)
-
-    assert isinstance(entry, AgentLogEntry)
-    assert entry.is_step
-    assert entry.step_number == 1
-    assert entry.message == "Starting..."
-
-def test_parse_raw_line():
-    line = "Some plain text output"
-    entry = parse_log_line(line)
-
-    assert isinstance(entry, RawLogEntry)
-    assert entry.log_type == "raw"
-
-def test_parse_invalid_json():
-    line = '{"broken json'
-    entry = parse_log_line(line)
-
-    assert isinstance(entry, RawLogEntry)
-```
-
-### Integration Tests
-
-```python
-# tests/test_manager.py
-
-import pytest
-from unittest.mock import Mock, patch
-from src.core.manager import ManagerAgent
-
-@pytest.fixture
-def manager():
-    settings = Mock()
-    settings.ORCHESTRATOR_MODEL = "test-model"
-    settings.get_orchestrator_config.return_value = {
-        "model": "test-model",
-        "api_base": "http://test",
-        "api_key": "test-key"
-    }
-    return ManagerAgent(settings=settings)
-
-def test_manager_initialization(manager):
-    assert len(manager.messages) == 1  # System prompt
-    assert manager.messages[0].role.value == "system"
-
-@patch('src.core.manager.completion')
-def test_manager_chat(mock_completion, manager):
-    mock_response = Mock()
-    mock_response.choices = [Mock()]
-    mock_response.choices[0].message.content = "Hello!"
-    mock_response.choices[0].message.tool_calls = None
-    mock_completion.return_value = mock_response
-
-    response = manager.chat("Hi")
-
-    assert response.content == "Hello!"
-    assert len(manager.messages) == 3  # system + user + assistant
+    @patch("src.core.manager.litellm")
+    def test_call_llm_thinking_model(self, mock_litellm):
+        # Verify thinking params for *-thinking models
+        assert call_kwargs.kwargs["thinking"] == {"type": "enabled", "budget_tokens": 10000}
 ```
 
 ### Running Tests
@@ -479,71 +515,14 @@ def test_manager_chat(mock_completion, manager):
 # Run all tests
 uv run pytest
 
-# Run with coverage
-uv run pytest --cov=src --cov-report=html
+# Run with verbose output
+uv run pytest -v
 
 # Run specific test file
-uv run pytest tests/test_parser.py -v
-```
+uv run pytest tests/test_config.py -v
 
----
-
-## Code Style
-
-### Formatting
-
-We use [Black](https://black.readthedocs.io/) for formatting and [isort](https://pycqa.github.io/isort/) for import sorting.
-
-```bash
-# Format code
-uv run black src/ tests/
-uv run isort src/ tests/
-
-# Check without modifying
-uv run black --check src/
-```
-
-### Type Hints
-
-All code should use type hints:
-
-```python
-# Good
-def parse_log_line(line: str) -> LogEntry:
-    ...
-
-def run_task(
-    self,
-    task: str,
-    model: str = "claude-3-5-sonnet-20241022",
-    on_output: Callable[[str], None] | None = None,
-) -> TaskResult:
-    ...
-
-# Check types
-uv run mypy src/
-```
-
-### Docstrings
-
-Use Google-style docstrings:
-
-```python
-def chat(self, user_message: str) -> ManagerResponse:
-    """
-    Process a user message and generate a response.
-
-    This may involve multiple LLM calls if tool use is required.
-
-    Args:
-        user_message: The user's input message.
-
-    Returns:
-        ManagerResponse with content and any worker results.
-
-    Raises:
-        RuntimeError: If LLM call fails after retries.
-    """
+# Run specific test class
+uv run pytest tests/test_manager.py::TestLiteLLMRouting -v
 ```
 
 ---
@@ -552,32 +531,32 @@ def chat(self, user_message: str) -> ManagerResponse:
 
 ### Application Logs
 
-GOrchestrator automatically logs to `.gorchestrator/gorchestrator.log`. Check this file for errors and debug information:
+GOrchestrator logs to `.gorchestrator/gorchestrator.log`:
 
 ```bash
-# View recent logs
-tail -f .gorchestrator/gorchestrator.log
-
-# On Windows PowerShell
+# View recent logs (PowerShell)
 Get-Content .gorchestrator\gorchestrator.log -Tail 50 -Wait
+
+# View recent logs (Unix)
+tail -f .gorchestrator/gorchestrator.log
 ```
 
 ### Debug LLM Calls
 
+Enable LiteLLM verbose logging:
 ```python
-# In manager.py
 import litellm
-litellm.set_verbose = True  # Shows all API calls
+litellm.set_verbose = True
 ```
 
-### Inspect Messages
-
-```python
-# Add to manager.py for debugging
-def _debug_messages(self):
-    for i, msg in enumerate(self.messages):
-        print(f"[{i}] {msg.role.value}: {msg.content[:50]}...")
+Or set environment variable:
+```bash
+LITELLM_LOG=DEBUG
 ```
+
+### Config Validation
+
+Use `/config validate` at runtime to check for common issues (missing paths, invalid keys, etc.).
 
 ---
 

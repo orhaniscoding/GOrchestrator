@@ -1,13 +1,12 @@
 # Setup Guide: Zero to Hero
 
-This guide will walk you through setting up the complete AI development ecosystem: **Antigravity Manager**, **Mini-SWE-GOCore**, and **GOrchestrator**.
+This guide will walk you through setting up GOrchestrator with its integrated worker core and an API proxy.
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [Step 1: Antigravity Manager](#step-1-antigravity-manager)
-- [Step 2: Mini-SWE-GOCore](#step-2-mini-swe-gocore)
-- [Step 3: GOrchestrator](#step-3-gorchestrator)
+- [Step 1: API Proxy](#step-1-api-proxy)
+- [Step 2: GOrchestrator](#step-2-gorchestrator)
 - [Configuration Deep Dive](#configuration-deep-dive)
 - [Troubleshooting](#troubleshooting)
 
@@ -36,65 +35,44 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ---
 
-## Step 1: Antigravity Manager
+## Step 1: API Proxy
 
-**Antigravity Manager** is the LiteLLM-based proxy that routes all API calls. It provides a unified interface for multiple LLM providers.
+You need an API proxy that routes LLM calls. GOrchestrator works with any proxy that supports `/v1/messages` (Anthropic) and `/v1/chat/completions` (OpenAI) endpoints:
 
-### 1.1 Clone and Install
+- **Antigravity Manager** (Rust-based, recommended)
+- **CLIProxyAPI** / **CLIProxyAPIPlus** (Go-based)
+- **Any OpenAI-compatible proxy**
+- **Direct API access** (set api_base to provider's URL directly)
+
+### Example: Antigravity Manager
 
 ```bash
 git clone https://github.com/lbjlaq/Antigravity-Manager.git
 cd Antigravity-Manager
-uv sync
+# Follow the build instructions in the repository
+./antigravity-manager  # Default port: 8045
 ```
 
-### 1.2 Configure
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your API keys:
-
-```bash
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-xxxxx
-
-# OpenAI (optional)
-OPENAI_API_KEY=sk-xxxxx
-
-# Proxy settings
-LITELLM_MASTER_KEY=sk-your-master-key
-PORT=8045
-```
-
-### 1.3 Start the Proxy
-
-```bash
-uv run python -m litellm --config config.yaml --port 8045
-```
-
-### 1.4 Verify
-
+Verify:
 ```bash
 curl http://127.0.0.1:8045/health
-# Should return: {"status": "healthy"}
 ```
 
-> **Keep this terminal running!** Antigravity Manager must be active for the other components to work.
+> **Keep the proxy running!** GOrchestrator needs it for LLM calls.
 
 ---
 
-## Step 2: Mini-SWE-GOCore
+## Step 2: GOrchestrator
 
-**Mini-SWE-GOCore** is the autonomous coding agent (the "Worker") that executes code and terminal commands.
+GOrchestrator includes the worker core (coding agent) built-in -- no separate installation needed.
 
 ### 2.1 Clone and Install
 
 ```bash
-cd ..  # Go back to parent directory
-git clone https://github.com/yourusername/Mini-SWE-GOCore.git
-cd Mini-SWE-GOCore
+git clone https://github.com/orhaniscoding/GOrchestrator.git
+cd GOrchestrator
+
+# Single install -- includes all dependencies (manager + worker core)
 uv sync
 ```
 
@@ -104,63 +82,23 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env`:
-
-```bash
-# Point to Antigravity Manager
-MINI_API_BASE=http://127.0.0.1:8045
-ANTHROPIC_API_KEY=sk-dummy  # Will be routed through proxy
-```
-
-### 2.3 Verify Installation
-
-```bash
-uv run mini --help
-# Should show Mini-SWE-GOCore help
-```
-
-> **Note:** You don't need to run Mini-SWE manually. GOrchestrator will spawn it as needed.
-
----
-
-## Step 3: GOrchestrator
-
-**GOrchestrator** is the intelligent Manager Agent that you interact with.
-
-### 3.1 Clone and Install
-
-```bash
-cd ..  # Go back to parent directory
-git clone https://github.com/yourusername/GOrchestrator.git
-cd GOrchestrator
-uv sync
-```
-
-### 3.2 Configure
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your complete configuration:
+Edit `.env` with your configuration:
 
 ```bash
 # ============================================================
-# ORCHESTRATOR (Manager Agent) Configuration
+# ORCHESTRATOR (Manager Agent) -- the LLM that talks to you
 # ============================================================
-ORCHESTRATOR_MODEL=claude-3-5-sonnet-20241022
+ORCHESTRATOR_MODEL=claude-sonnet-4-20250514
 ORCHESTRATOR_API_BASE=http://127.0.0.1:8045
-ORCHESTRATOR_API_KEY=sk-your-master-key
+ORCHESTRATOR_API_KEY=sk-your-proxy-key
 
 # ============================================================
-# WORKER (Mini-SWE-GOCore) Configuration
+# WORKER (Integrated Worker Core) -- the LLM that writes code
 # ============================================================
-WORKER_MODEL=claude-3-5-sonnet-20241022
+WORKER_MODEL=claude-sonnet-4-20250514
 WORKER_PROFILE=live
-AGENT_PATH=../Mini-SWE-GOCore
 PROXY_URL=http://127.0.0.1:8045
-PROXY_KEY=sk-your-master-key
-BYPASS_KEY=sk-dummy
+PROXY_KEY=sk-your-proxy-key
 
 # ============================================================
 # Application Settings
@@ -170,63 +108,59 @@ MAX_WORKER_ITERATIONS=5
 WORKER_TIMEOUT=600
 ```
 
-### 3.3 Run GOrchestrator
+### 2.3 Run GOrchestrator
 
 ```bash
 uv run python main.py
 ```
 
-You should see:
+You should see the startup dashboard:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│   GOrchestrator   - Intelligent AI Agent Manager             │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────── GOrchestrator ──────────────────────┐
+│  Session: bold-phoenix (new)                              │
+│  Manager: claude-sonnet-4-20250514 @ http://127.0.0.1:8045│
+│                                                           │
+│  Workers:                                                 │
+│    ● default  (claude-sonnet-4-20250514, live) [primary]  │
+│                                                           │
+│  Mode: Quiet | Confirm: OFF                               │
+└───────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                      Configuration                          │
-├─────────────────┬───────────────────────────────────────────┤
-│ Manager Model   │ claude-3-5-sonnet-20241022                │
-│ Worker Model    │ claude-3-5-sonnet-20241022                │
-│ Agent Path      │ C:\...\Mini-SWE-GOCore                    │
-│ Mode            │ Quiet                                     │
-└─────────────────┴───────────────────────────────────────────┘
-
-ℹ Chat with the Manager Agent. Use /help for commands.
-
-You> _
+You>
 ```
 
 ---
 
 ## Configuration Deep Dive
 
-### Understanding the Two-Agent Setup
+### Understanding the Architecture
 
-GOrchestrator uses **two separate LLM configurations**:
+Both Manager and Worker use **LiteLLM** for unified provider-aware routing. The provider is auto-detected from the model name:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    ORCHESTRATOR (Manager)                    │
 │                                                             │
 │  ORCHESTRATOR_MODEL     = The model YOU talk to             │
-│  ORCHESTRATOR_API_BASE  = Where Manager sends LLM calls     │
-│  ORCHESTRATOR_API_KEY   = Key for Manager's LLM access      │
+│  ORCHESTRATOR_API_BASE  = Proxy endpoint                    │
+│  ORCHESTRATOR_API_KEY   = Key for proxy auth                │
 │                                                             │
-│  Role: Understand requirements, plan, delegate, explain     │
+│  Provider auto-detected from model name:                    │
+│    claude-* → LiteLLM (anthropic) → /v1/messages            │
+│    gpt-*   → LiteLLM (openai)    → /v1/chat/completions    │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼ delegates to
 ┌─────────────────────────────────────────────────────────────┐
-│                    WORKER (Mini-SWE-GOCore)                  │
+│                 WORKER(S) (Integrated Worker Core)          │
 │                                                             │
-│  WORKER_MODEL   = The model Worker uses internally          │
-│  AGENT_PATH     = Path to Mini-SWE-GOCore folder            │
+│  WORKER_MODEL   = Default Worker model                      │
 │  PROXY_URL      = Where Worker sends LLM calls              │
-│  PROXY_KEY      = Key for Worker's LLM access               │
-│  BYPASS_KEY     = Fallback key for direct API access        │
+│  PROXY_KEY      = Key for Worker's proxy auth               │
 │                                                             │
-│  Role: Execute code, run commands, modify files             │
+│  Additional workers: /worker add <name> [model] [profile]   │
+│  Per-worker API:     /worker api <name> <url> [key]         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -234,9 +168,9 @@ GOrchestrator uses **two separate LLM configurations**:
 
 | Use Case | Manager Model | Worker Model |
 |----------|---------------|--------------|
-| **Cost-Effective** | claude-3-haiku | claude-3-5-sonnet |
-| **Balanced** | claude-3-5-sonnet | claude-3-5-sonnet |
-| **Maximum Power** | claude-3-opus | claude-3-5-sonnet |
+| **Cost-Effective** | claude-haiku | claude-sonnet |
+| **Balanced** | claude-sonnet | claude-sonnet |
+| **Maximum Power** | claude-opus-thinking | claude-sonnet |
 
 > **Tip:** The Manager handles conversation, so a faster/cheaper model works well. The Worker needs strong coding abilities.
 
@@ -244,22 +178,41 @@ GOrchestrator uses **two separate LLM configurations**:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ORCHESTRATOR_MODEL` | LLM model for Manager | claude-3-5-sonnet-20241022 |
+| `ORCHESTRATOR_MODEL` | LLM model for Manager | claude-sonnet-4-20250514 |
 | `ORCHESTRATOR_API_BASE` | API endpoint for Manager | http://127.0.0.1:8045 |
-| `ORCHESTRATOR_API_KEY` | API key for Manager | sk-dummy-orchestrator-key |
-| `WORKER_MODEL` | LLM model for Worker | claude-3-5-sonnet-20241022 |
-| `WORKER_PROFILE` | Worker config profile (live, swebench, custom) | live |
-| `AGENT_PATH` | Path to Mini-SWE-GOCore | ../Mini-SWE-GOCore |
-| `PROXY_URL` | Proxy URL for Worker | http://127.0.0.1:8045 |
-| `PROXY_KEY` | Proxy key for Worker | sk-dummy-proxy-key |
-| `BYPASS_KEY` | Direct API bypass key | sk-dummy |
+| `ORCHESTRATOR_API_KEY` | API key for Manager | sk-your-proxy-key |
+| `WORKER_MODEL` | Default LLM model for Worker | claude-sonnet-4-20250514 |
+| `WORKER_PROFILE` | Worker config profile | livesweagent |
+| `AGENT_PATH` | Path to integrated worker core (usually no need to change) | src/worker_core |
+| `PROXY_URL` | Proxy URL for Worker subprocess | http://127.0.0.1:8045 |
+| `PROXY_KEY` | Proxy key for Worker subprocess | sk-your-proxy-key |
 | `VERBOSE_WORKER` | Show detailed Worker output | false |
-| `MAX_WORKER_ITERATIONS` | Max Worker retries | 5 |
+| `MAX_WORKER_ITERATIONS` | Max Worker retries per task | 5 |
 | `WORKER_TIMEOUT` | Max seconds per Worker task (0 = no timeout) | 600 |
+
+### Runtime Configuration
+
+All config values can be changed at runtime and are persisted to `.env`:
+
+```bash
+# Change models
+/model manager claude-opus-4-6-thinking
+/model worker claude-sonnet-4-20250514
+
+# Set any config value
+/config set MAX_WORKER_ITERATIONS 10
+/config set VERBOSE_WORKER true
+
+# Reload .env after external changes
+/config reload
+
+# Validate config
+/config validate
+```
 
 ### Worker Profiles
 
-The `WORKER_PROFILE` setting tells GOrchestrator which configuration file to use when spawning the Worker agent. Profiles are YAML files stored in Mini-SWE-GOCore's `.miniswe/configs/` directory.
+The `WORKER_PROFILE` setting tells GOrchestrator which configuration file to use when spawning the Worker agent. Profiles are YAML files stored in the worker core's `.miniswe/configs/` directory.
 
 **How it works:**
 
@@ -268,57 +221,34 @@ When GOrchestrator runs the Worker, it executes:
 uv run mini --headless --profile <WORKER_PROFILE> --model <WORKER_MODEL> --task "..."
 ```
 
-Mini-SWE-GOCore then loads the matching config file:
+The worker core loads the matching config file:
 ```
-Mini-SWE-GOCore/
+src/worker_core/
 └── .miniswe/
     └── configs/
         ├── live.yaml             # WORKER_PROFILE=live (default, general purpose)
-        ├── livesweagent.yaml     # WORKER_PROFILE=livesweagent (SWE agent with custom prompts)
+        ├── livesweagent.yaml     # WORKER_PROFILE=livesweagent (SWE agent)
         └── my_custom.yaml        # WORKER_PROFILE=my_custom (your own profile)
 ```
 
-**Profile contents:**
+### Multi-Worker Setup
 
-Each YAML profile controls:
-
-| Section | What it configures |
-|---------|-------------------|
-| `agent.system_template` | System prompt for the Worker LLM |
-| `agent.instance_template` | Task template with instructions |
-| `agent.step_limit` | Max steps per task (0 = unlimited) |
-| `agent.cost_limit` | Max cost in USD per task |
-| `agent.mode` | Interaction mode (e.g., `confirm`) |
-| `model.model_name` | LLM model (can override `WORKER_MODEL`) |
-| `model.api_base` | API endpoint (can override proxy settings) |
-| `model.model_kwargs` | Model parameters (temperature, max_tokens, etc.) |
-| `environment.env` | Environment variables for the Worker |
-
-**Example: Using the `livesweagent` profile:**
+Workers can be managed at runtime without editing `.env`:
 
 ```bash
-# In your .env
-WORKER_PROFILE=livesweagent
+# Add workers with different specializations
+/worker add coder claude-sonnet-4-20250514 live
+/worker add tester claude-sonnet-4-20250514 livesweagent
+
+# Activate workers
+/worker set coder active
+/worker set tester active
+
+# Set per-worker API (e.g., different proxy or direct API)
+/worker api tester https://api.z.ai sk-zai-key
+
+# Worker config persists in .gorchestrator/workers.json
 ```
-
-The `livesweagent.yaml` profile includes specialized prompts for software engineering tasks with detailed instructions for file editing, code analysis, and tool creation.
-
-**Creating a custom profile:**
-
-1. Copy an existing profile:
-   ```bash
-   cd Mini-SWE-GOCore
-   cp .miniswe/configs/live.yaml .miniswe/configs/my_project.yaml
-   ```
-
-2. Edit the YAML to customize behavior (model, prompts, limits, etc.)
-
-3. Update GOrchestrator's `.env`:
-   ```bash
-   WORKER_PROFILE=my_project
-   ```
-
-> **Note:** If the profile YAML defines `model.model_name` and `model.api_base`, those values may override the `WORKER_MODEL`, `PROXY_URL`, and `PROXY_KEY` settings from GOrchestrator's `.env`. Check your profile YAML to understand which settings take precedence.
 
 ---
 
@@ -327,10 +257,10 @@ The `livesweagent.yaml` profile includes specialized prompts for software engine
 ### "Agent path does not exist"
 
 ```
-Error: Agent path does not exist: C:\...\Mini-SWE-GOCore
+Error: Agent path does not exist: ...
 ```
 
-**Solution:** Update `AGENT_PATH` in `.env` to the correct path to Mini-SWE-GOCore.
+**Solution:** The worker core should be at `src/worker_core` by default. If you moved it, update `AGENT_PATH` in `.env`.
 
 ### "Connection refused" to proxy
 
@@ -338,11 +268,7 @@ Error: Agent path does not exist: C:\...\Mini-SWE-GOCore
 Error: Connection refused at http://127.0.0.1:8045
 ```
 
-**Solution:** Make sure Antigravity Manager is running:
-```bash
-cd Antigravity-Manager
-uv run python -m litellm --config config.yaml --port 8045
-```
+**Solution:** Make sure your API proxy is running.
 
 ### "uv is not installed"
 
@@ -359,18 +285,6 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Windows encoding errors
-
-```
-UnicodeEncodeError: 'charmap' codec can't encode character
-```
-
-**Solution:** This should be automatically handled. If not, run:
-```bash
-set PYTHONIOENCODING=utf-8
-uv run python main.py
-```
-
 ### LLM API errors
 
 ```
@@ -378,9 +292,23 @@ Error: Invalid API key
 ```
 
 **Solution:**
-1. Check your API keys in Antigravity Manager's `.env`
-2. Ensure the proxy is properly configured
-3. Verify the master key matches in all `.env` files
+1. Check your API keys in your proxy's configuration
+2. Verify the key matches in GOrchestrator's `.env`
+
+### Provider routing issues
+
+If a model is misdetected, use explicit prefix: `anthropic/claude-opus-4` or `openai/gpt-4o`
+
+### Worker timeout
+
+```
+Error: Worker task exceeded timeout (600s)
+```
+
+**Solution:** Increase the timeout:
+```bash
+/config set WORKER_TIMEOUT 1200
+```
 
 ---
 
@@ -388,7 +316,7 @@ Error: Invalid API key
 
 Once everything is running:
 
-1. **Read the [User Guide](user_guide.md)** to learn how to interact with GOrchestrator
+1. **Read the [User Guide](user_guide.md)** to learn all available commands
 2. **Check the [Architecture](architecture.md)** to understand how it all works
 3. **Explore the [Developer Guide](developer_guide.md)** if you want to customize or contribute
 
