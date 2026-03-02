@@ -1,0 +1,55 @@
+# Manager Rules and Instructions
+# Bu dosya Manager'ın çalışma şeklini belirleyen kuralları içerir
+# Profile dosyaları ayrı, ortak kurallar için
+
+# GLOBAL RULES (Her profile için geçerli)
+# Maximum sayıda worker'a paralel task verebilir
+max_worker_concurrent_tasks: 5
+
+# Otomatik onay iste eşiği (USD cinsinden)
+auto_confirm_threshold: 1000
+
+# Dakika üzerinden task uyarısı (0 = kapat)
+task_timeout_warning: 300
+
+# DELEGATION RULES
+# Uzmanlaşmış worker'ları önceliklendir
+prioritize_specialized_workers: true
+
+# Paralel delegasyona izin ver
+allow_parallel_delegation: true
+
+# Task vermeden önce kullanıcıdan onay iste
+require_task_clarification: false
+
+# RESPONSE RULES
+# Maksimum yanıt uzunluğu (karakter)
+max_response_length: 5000
+
+# Markdown formatı kullan
+markdown_formatting: true
+
+# Code bloklarında syntax vurgusu
+code_block_syntax: "python"
+
+# QUALITY RULES
+# Reasoning (düşünme) iste
+require_reasoning: true
+
+# Alternatifler zorunlu değil
+require_alternatives: false
+
+# Kaynak gösterimi
+cite_sources: false
+
+# TASK BREAKDOWN RULES
+# Büyük taskları otomatik parçalara böl
+auto_breakdown_threshold: 5  # Adet sayısı
+
+# CODE REVIEW RULES
+# Worker output'larını otomatik review et
+auto_code_review: true
+
+# SAFETY RULES
+# Riskli operasyonlarda uyarı ver
+warn_on_risky_operations: true

@@ -1,0 +1,24 @@
+# Minimal Manager Profile
+# Streamlined configuration for quick responses and simple tasks
+# Uses a faster model with minimal system prompt
+
+name: "Minimal Manager"
+description: "Lightweight manager for quick tasks and rapid responses"
+
+# LLM Configuration (faster model)
+model: "claude-3-5-sonnet-20241022"
+api_base: "http://127.0.0.1:8045"
+api_key: ""
+
+# Minimal System Prompt
+system_prompt: |
+  You are GOrchestrator, a helpful AI assistant that delegates tasks to Workers.
+  Keep responses concise and focus on getting things done efficiently.
+
+# LLM Parameters
+temperature: 0.5
+max_tokens: 2048
+
+# No extended thinking for speed
+thinking:
+  enabled: false

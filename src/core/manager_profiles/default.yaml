@@ -1,0 +1,23 @@
+# Default Manager Profile
+# This is the standard GOrchestrator Manager configuration
+# Compatible with the existing system - uses the same model and API settings
+
+name: "Default Manager"
+description: "Standard GOrchestrator Manager with balanced performance"
+
+# LLM Configuration
+model: "claude-sonnet-4-20250514"
+api_base: "http://127.0.0.1:8045"
+api_key: ""
+
+# System Prompt (optional - if null, uses ManagerAgent default)
+system_prompt: null
+
+# LLM Parameters (optional - if null, uses ManagerAgent defaults)
+temperature: null
+max_tokens: null
+
+# Extended Thinking (for *-thinking models)
+thinking:
+  enabled: false
+  budget_tokens: 10000
