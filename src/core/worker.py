@@ -1,12 +1,11 @@
 """
-Agent Worker - Subprocess wrapper for Mini-SWE-GOCore.
+Agent Worker - Subprocess wrapper for the integrated worker core.
 Handles spawning the agent process with proper environment injection and real-time output streaming.
 """
 
 import logging
 import os
 import re
-import signal
 import subprocess
 import time
 from collections.abc import Callable, Generator
@@ -28,6 +27,7 @@ _NOISE_PATTERNS = [
     "litellm.set_verbose",
     "Give Feedback",
 ]
+_NOISE_RE = re.compile("|".join(re.escape(p) for p in _NOISE_PATTERNS))
 
 
 class TaskStatus(Enum):
@@ -73,7 +73,7 @@ class TaskResult:
 
 class AgentWorker:
     """
-    Wrapper class for running Mini-SWE-GOCore agent as a subprocess.
+    Wrapper class for running the integrated worker core agent as a subprocess.
     Provides real-time streaming of agent output.
     """
 
@@ -86,41 +86,54 @@ class AgentWorker:
         """
         self.settings = settings or get_settings()
 
-    def _build_command(self, task: str, model: str) -> list[str]:
+    def _build_command(self, task: str, model: str, profile: str | None = None) -> list[str]:
         """
         Build the command to run the agent.
 
         Args:
             task: The task description for the agent.
             model: The model to use (e.g., 'claude-3-5-sonnet-20241022').
+            profile: Optional profile override. Falls back to settings.
 
         Returns:
             List of command arguments.
         """
+        profile = profile or self.settings.WORKER_PROFILE
         return [
             "uv",
             "run",
             "mini",
             "--headless",
             "--profile",
-            self.settings.WORKER_PROFILE,
+            profile,
             "--model",
             model,
             "--task",
             task,
         ]
 
-    def _build_env(self) -> dict[str, str]:
-        """
-        Build the environment variables for the subprocess.
-        Merges current environment with agent-specific variables.
+    # Allowlisted environment variables for worker subprocess
+    _ENV_ALLOWLIST = {
+        "PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "COMSPEC",
+        "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
+        "PYTHONPATH", "VIRTUAL_ENV", "UV_CACHE_DIR",
+        "TERM", "COLORTERM", "FORCE_COLOR",
+    }
 
-        Returns:
-            Dictionary of environment variables.
+    def _build_env(self, api_base_override: str | None = None, api_key_override: str | None = None) -> dict[str, str]:
         """
-        env = os.environ.copy()
+        Build minimal environment variables for the subprocess.
+        Only allowlisted env vars are passed to prevent credential leakage.
+        Supports per-worker API overrides.
+        """
+        env = {k: v for k, v in os.environ.items() if k in self._ENV_ALLOWLIST}
         env.update(self.settings.get_agent_env())
-        # Suppress LiteLLM INFO log spam (e.g. "Provider List" messages)
+        # Per-worker API override -- pass base URL as-is, LiteLLM adds suffix
+        if api_base_override:
+            env["MINI_API_BASE"] = api_base_override.rstrip("/")
+        if api_key_override:
+            env["MINI_API_KEY"] = api_key_override
+        # Suppress LiteLLM INFO log spam
         env["LITELLM_LOG"] = "ERROR"
         return env
 
@@ -131,7 +144,7 @@ class AgentWorker:
         stripped = re.sub(r'\x1b\[[0-9;]*m', '', line).strip()
         if not stripped:
             return False
-        return any(pattern in stripped for pattern in _NOISE_PATTERNS)
+        return bool(_NOISE_RE.search(stripped))
 
     def _terminate_process(self, process: subprocess.Popen):
         """Gracefully terminate a subprocess, force kill if needed."""
@@ -151,7 +164,10 @@ class AgentWorker:
     def run(
         self,
         task: str,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str,
+        profile: str | None = None,
+        api_base: str | None = None,
+        api_key: str | None = None,
         on_output: Callable[[str], None] | None = None,
     ) -> Generator[str, None, int]:
         """
@@ -160,6 +176,9 @@ class AgentWorker:
         Args:
             task: The task description for the agent to execute.
             model: The model to use. Defaults to claude-3-5-sonnet.
+            profile: Optional profile override. Falls back to settings.
+            api_base: Optional per-worker API base URL override.
+            api_key: Optional per-worker API key override.
             on_output: Optional callback for each output line.
 
         Yields:
@@ -168,8 +187,8 @@ class AgentWorker:
         Returns:
             The exit code of the subprocess.
         """
-        command = self._build_command(task, model)
-        env = self._build_env()
+        command = self._build_command(task, model, profile)
+        env = self._build_env(api_base, api_key)
         agent_path = self.settings.agent_path_resolved
 
         if not agent_path.exists():
@@ -222,7 +241,10 @@ class AgentWorker:
     def run_task(
         self,
         task: str,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str,
+        profile: str | None = None,
+        api_base: str | None = None,
+        api_key: str | None = None,
         on_output: Callable[[str], None] | None = None,
     ) -> TaskResult:
         """
@@ -231,6 +253,9 @@ class AgentWorker:
         Args:
             task: The task description for the agent to execute.
             model: The model to use.
+            profile: Optional profile override. Falls back to settings.
+            api_base: Optional per-worker API base URL override.
+            api_key: Optional per-worker API key override.
             on_output: Optional callback for each output line (for streaming to UI).
 
         Returns:
@@ -246,7 +271,7 @@ class AgentWorker:
         error_message = None
 
         try:
-            gen = self.run(task, model, on_output)
+            gen = self.run(task, model, profile, api_base, api_key, on_output)
             timeout = self.settings.WORKER_TIMEOUT
 
             for line in gen:
